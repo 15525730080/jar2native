@@ -1,63 +1,183 @@
-# JavaPackager 🚀
+# jar2native 🚀
 
-A cross-platform tool to package JAR/WAR files into standalone executables with a minimal JRE — no Java installation needed!  
-一款跨平台工具，可将 JAR/WAR 文件打包为独立可执行文件（EXE/Linux 二进制），内置最小 JRE，用户无需安装 Java！
+Package any JAR/WAR into a **single self-contained binary** — no Java, no JRE, no unzipping needed on the target machine. Just download and run.
 
----
-
-## 功能特点 ✨ / Features ✨
-- 📦 打包 JAR/WAR 为单文件可执行程序（无外部依赖）
-- 🛠️ 自动检测 JDK（9+），构建**最小化 JRE**（减小文件体积）
-- 🌍 跨平台支持（Windows 10+、Linux；macOS 即将支持）
-- 🚀 一键打包（通过 `jdeps` 自动处理模块依赖）
-- 🎯 支持自定义 JDK 路径和额外模块
-- 📚 兼容模块化/非模块化 Java 应用
-- 📦 Packages JAR/WAR into single standalone executable (no external dependencies)
-- 🛠️ Auto-detects JDK (9+) and builds a **minimal JRE** (reduces file size)
-- 🌍 Cross-platform support (Windows 10+, Linux; macOS coming soon)
-- 🚀 One-click packaging (auto-handles module dependencies via `jdeps`)
-- 🎯 Supports custom JDK paths and extra modules
-- 📚 Works with both modular and non-modular Java apps
+将任意 JAR/WAR 打包成**单文件可执行二进制**，目标机器无需安装 Java，下载即用。
 
 ---
 
-## 前置要求 📋 / Prerequisites 📋
-使用前请确保安装以下依赖：
-Before using JavaPackager, ensure you have these installed:
-- [Python 3.8+](https://www.python.org/downloads/)（Python 环境）
-- [JDK 9+](https://adoptium.net/)（需 JDK 9+，依赖 `jlink` 和 `jdeps` 工具）
-- Pip（Python 包管理器，Python 3.4+ 自带）
-- [Python 3.8+](https://www.python.org/downloads/)
-- [JDK 9+](https://adoptium.net/) (required for `jlink` and `jdeps` tools)
-- Pip (included with Python 3.4+)
+## How it works ⚙️
+
+```
+jar2native myapp.jar
+     │
+     ├─ 1. jdeps   → detect required Java modules
+     ├─ 2. jlink   → build minimal JRE (only needed modules)
+     ├─ 3. zip     → pack JAR + JRE into an in-memory zip
+     ├─ 4. embed   → write a Go source file with //go:embed payload.zip
+     └─ 5. go build → compile a single self-contained binary  ✅
+```
+
+On first launch, the binary extracts itself to `~/.cache/jar2native/<hash>/` and runs `jre/bin/java -jar app.jar`. Subsequent launches skip extraction (50 ms startup).
 
 ---
 
-## 使用方法 🚀 / Usage 🚀
-python jar2native.py <your-file.jar/war> [options]
+## Prerequisites 📋
 
+**Build machine** (where you run `jar2native`):
+- JDK 9+ (provides `jlink` and `jdeps`)
+- Go 1.21+
 
----
-
-## 输出文件 📁 / Output 📁
-可执行文件会生成在 dist/ 文件夹中（例：Windows 下为 myapp.exe，Linux 下为 myapp）
-可执行文件为自包含格式：内置你的 JAR/WAR + 最小 JRE + 启动器
-无临时文件残留（通过 Python tempfile 模块自动清理）
-The executable will be generated in the dist/ folder (e.g., myapp.exe on Windows, myapp on Linux)
-The executable is self-contained: includes your JAR/WAR + minimal JRE + launcher
-No temporary files left behind (auto-cleaned via Python's tempfile module)
+**Target machine** (where the output binary runs):
+- Nothing. Zero dependencies.
 
 ---
 
-### 工作原理 ⚙️ / How It Works ⚙️
-JDK 检测：自动查找有效 JDK 9+（或使用自定义路径）
-依赖分析：通过 jdeps 检测 Java 应用所需模块
-最小 JRE 构建：使用 jlink 生成仅包含必要模块的精简 JRE
-打包：通过 PyInstaller 捆绑 JRE、应用文件和 Python 启动器为单文件可执行程序
-清理：自动删除临时文件（无残留）
-JDK Detection: Finds a valid JDK 9+ (or uses your custom path)
-Dependency Analysis: Runs jdeps to detect required Java modules
-Minimal JRE Build: Uses jlink to create a tiny JRE with only needed modules
-Packaging: Uses PyInstaller to bundle the JRE, your app, and a Python launcher into a single executable
-Cleanup: Auto-deletes temporary files (no residue!)
+## Build jar2native 🔨
 
+```bash
+# Build for current platform
+make build          # → ./jar2native
+
+# Build for all platforms
+make release        # → dist/jar2native-{os}-{arch}[.exe]
+
+# Install to $GOPATH/bin
+make install
+```
+
+---
+
+## Usage 🚀
+
+```
+jar2native [options] <file.jar|file.war>
+
+Options:
+  -jdk-path string      Custom JDK installation path
+  -extra-module value   Additional Java module to include (repeatable)
+  -all-modules          Include all JDK modules (maximum compatibility)
+  -os string            Target OS: linux, darwin, windows (default: current)
+  -arch string          Target arch: amd64, arm64 (default: current)
+  -version              Print version and exit
+```
+
+### Examples
+
+```bash
+# Basic — produces dist/myapp (macOS/Linux) or dist/myapp.exe (Windows)
+jar2native myapp.jar
+
+# Cross-compile for Linux amd64 (run on macOS, get a Linux binary)
+jar2native myapp.jar --os linux --arch amd64
+
+# WAR file with extra modules
+jar2native myapp.war --extra-module java.sql --extra-module java.naming
+
+# Custom JDK path
+jar2native myapp.jar --jdk-path /usr/lib/jvm/java-17-openjdk
+
+# Include all JDK modules (larger output, maximum compatibility)
+jar2native myapp.jar --all-modules
+```
+
+---
+
+## Output 📦
+
+A single binary in `dist/`:
+
+```
+dist/myapp          ← macOS / Linux  (~15–80 MB depending on JRE size)
+dist/myapp.exe      ← Windows
+```
+
+**To run on the target machine:**
+
+```bash
+# macOS / Linux — just run it
+chmod +x myapp && ./myapp
+
+# Windows — just double-click or run
+myapp.exe
+```
+
+First launch extracts the embedded JRE to `~/.cache/jar2native/<hash>/` (one-time, a few seconds). All subsequent launches start in ~50 ms.
+
+---
+
+## Real-world Example: Halo Blog 🌰
+
+[Halo](https://github.com/halo-dev/halo) is a full-featured Java blog platform. Its release artifact is a single Spring Boot fat JAR (~119 MB) that bundles the backend, 218 dependencies, and the entire Vue-based admin console — making it a perfect real-world test case.
+
+**Step 1 — Download the official release JAR:**
+
+```bash
+curl -L -O https://github.com/halo-dev/halo/releases/download/v2.23.1/halo-2.23.1.jar
+```
+
+**Step 2 — Package into a self-contained binary:**
+
+```bash
+# --all-modules ensures Spring Boot's dynamic class loading works correctly
+jar2native --all-modules halo-2.23.1.jar
+```
+
+Output:
+
+```
+────────────────────────────────────────────────────────────
+  jar2native 2.0.0
+────────────────────────────────────────────────────────────
+[STEP] Analyzing module dependencies
+[INFO] Using all JDK modules
+[STEP] Building minimal JRE
+[OK]   Minimal JRE built successfully
+[STEP] Building payload (JAR + JRE)
+[INFO] Payload size: 180.4 MB  hash: 4ed6022f2122…
+[STEP] Compiling binary: dist/halo-2.23.1
+[OK]   Binary compiled: dist/halo-2.23.1
+
+✅ Done in 6.69s
+   Output : dist/halo-2.23.1
+   Size   : 183.8 MB
+```
+
+**Step 3 — Ship and run (no Java required on the target machine):**
+
+```bash
+chmod +x halo-2.23.1
+./halo-2.23.1
+```
+
+```
+[jar2native] First run: extracting runtime...
+
+  ██╗  ██╗ █████╗ ██╗      ██████╗
+  ██║  ██║██╔══██╗██║     ██╔═══██╗
+  ███████║███████║██║     ██║   ██║
+  ██╔══██║██╔══██║██║     ██║   ██║
+  ██║  ██║██║  ██║███████╗╚██████╔╝
+  ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝
+
+  Halo 2.23.1 is starting...
+```
+
+Halo starts on `http://localhost:8090` — no Java, no JRE, no `apt install`, nothing.
+
+**What's inside the 183 MB binary:**
+
+```
+halo-2.23.1  (single executable)
+├── embedded JRE       ~60 MB  (jlink-trimmed, only needed modules)
+└── halo-2.23.1.jar   ~119 MB
+    ├── BOOT-INF/lib/          218 dependency JARs (Spring Boot, R2DBC, …)
+    ├── BOOT-INF/classes/      backend bytecode
+    └── BOOT-INF/classes/console/  Vue admin console (HTML + JS + CSS)
+```
+
+---
+
+## License
+
+See [LICENSE](LICENSE).
