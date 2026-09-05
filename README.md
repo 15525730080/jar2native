@@ -1,181 +1,109 @@
-# jar2native 🚀
+# jar2native
 
-Package a Java JAR/WAR into a **single self-contained executable** with an embedded Java runtime — no Java installation needed on the target machine.
-将 Java JAR/WAR 打包为单文件自包含可执行程序,内置 Java 运行时,目标机器无需安装 Java。
+Turn any executable JAR or WAR into a standalone native binary — no Java required at runtime.
 
----
+jar2native packages a Java JAR/WAR into a self-contained executable with an embedded JRE. The output is a single binary file that runs anywhere the target platform supports, with zero external dependencies.
 
-## 默认行为 / Default behavior
+## Use Cases
 
-> **By default, jar2native packages a full Java runtime.**
+- **Distribute Java apps as native binaries** — Ship a single executable instead of requiring users to install Java.
+- **Simplify deployment** — One file to copy, `chmod +x`, and run. No `java -jar`, no CLASSPATH, no JRE setup.
+- **Cross-platform builds** — Package for Linux, macOS, or Windows from a single command.
+- **Embed in containers** — Smaller footprint than a full JDK image; just copy the binary in.
 
-```bash
-jar2native app.jar
-```
+## How It Works
 
-默认不执行 `jdeps`、不做任何模块依赖分析,直接打包当前 JDK 的完整运行时,以最大化运行兼容性。开箱即用,优先保证「能跑」,而不是「最小」。
+1. **Inspect** — Parse `MANIFEST.MF`, detect Spring Boot, validate `Main-Class`.
+2. **Resolve JDK** — From `--jdk`, `JAVA_HOME`, or auto-search standard platform locations.
+3. **Build runtime** — Full JRE via `jlink` (JDK 9+) or copy legacy JRE (Java 8). Use `-analyze` to run `jdeps` for module trimming.
+4. **Assemble payload** — Deterministic `payload.zip` (app + JRE + `manifest.json`) with fixed timestamps and content hashing.
+5. **Generate runner** — A Go project that embeds the payload and launches `java -jar` with forwarded arguments and signals.
+6. **Compile** — `go build` produces the final single binary.
 
-By default no `jdeps` and no module analysis is performed — the full runtime of the detected JDK is bundled for maximum compatibility. Correctness and compatibility come first; size does not.
-
----
-
-## `--deps`:体积优先,自担风险
-
-```bash
-jar2native app.jar --deps
-```
-
-> **Use `--deps` to enable dependency analysis and create a smaller runtime.**
-
-`--deps` enables Java module dependency analysis using `jdeps`, then builds a minimal runtime with `jlink`. This can significantly reduce the final binary size, but applications using:
-
-- reflection
-- dynamic class loading
-- `ServiceLoader`
-- JNI
-- framework-generated classes
-- unusual class loaders
-
-may require additional modules that `jdeps` cannot detect. Use `--extra-module <name>` to add missing modules explicitly.
-
-**If `jdeps` analysis fails, the build fails** — jar2native never silently falls back to a guessed module set, because a "successfully built" binary that crashes at runtime is worse than a clear error. You can either fix the dependency problem or rerun without `--deps` to use the full JRE.
-
-默认 = 稳,`--deps` = 小。
-
----
-
-## 平台限制 / Platform policy
-
-> jar2native currently packages a **platform-specific** Java runtime.
-> Cross-platform JRE packaging is **not supported**.
-
-The embedded JRE comes from the build machine, so the executable platform, the embedded JRE platform and the build machine platform must all be identical:
-
-```text
-Windows amd64 → build on Windows amd64 → run on Windows amd64
-macOS arm64   → build on macOS arm64   → run on macOS arm64
-Linux amd64   → build on Linux amd64   → run on Linux amd64
-```
-
-If you request `--os/--arch` different from the current machine, jar2native refuses with a clear error instead of producing a binary that embeds a foreign JRE. **Build on the platform where you intend to run the generated executable.** Go's cross-compilation is kept as a low-level capability, but it is rejected whenever the embedded JRE would not match the target.
-
----
-
-## 使用方法 / Usage
+## Quick Start
 
 ```bash
-# Default: full JRE, current platform, maximum compatibility
-jar2native myapp.jar
+# Build the tool
+go build -o jar2native .
 
-# Opt-in dependency analysis (smaller runtime, compatibility trade-off)
-jar2native myapp.jar --deps
+# Package a JAR — produces ./myapp
+./jar2native -jar app.jar -o myapp
 
-# Add modules that jdeps could not detect (Spring apps often need these)
-jar2native myapp.jar --deps --extra-module java.sql --extra-module java.naming
+# Package a WAR (must be executable — have Main-Class)
+./jar2native -jar app.war -o myapp
 
-# Bake JVM arguments into the executable
-jar2native myapp.jar --jvm-arg "-Xmx2g" --jvm-arg "-Dfoo=bar"
+# Cross-compile for Linux
+./jar2native -jar app.jar -o myapp --platform linux/amd64
 
-# Use a specific local JDK (validated strictly)
-jar2native myapp.jar --jdk-path /usr/lib/jvm/java-17-openjdk
+# With JVM arguments
+./jar2native -jar app.jar -o myapp --jvm-args "-Xmx2g -Dfile.encoding=UTF-8"
 
-# Skip the post-build smoke test (not recommended)
-jar2native myapp.jar --skip-smoke-test
+# Run the result — that's it
+./myapp
 ```
 
-### Prerequisites
+## Requirements
 
-- **A full JDK on the build machine** (Java 8+). jar2native **only** uses the JDK you point to via `--jdk-path` or one detected locally on the machine — it never downloads or installs a JDK itself. Detected JDKs are strictly validated (`bin/java`, `bin/jlink`, `jdeps` in `--deps` mode, `jmods/`).
-- **Go** (https://go.dev/dl/) — used to compile the final self-contained executable.
+- **Build time:** JDK 9+ (for `jlink`) or JDK 8 (for legacy JRE copy), Go 1.23+
+- **Runtime:** None. The output binary is fully self-contained — no Java, no JRE, no DLLs.
 
-### Input types
+## Platform Support
 
-| 类型 | 支持 | 说明 |
-| --- | --- | --- |
-| Executable JAR (有 `Main-Class`) | ✅ | `java -jar app.jar` 可运行 |
-| Spring Boot executable JAR | ✅ | 自动识别 `BOOT-INF/` + loader |
-| Executable WAR (有 `Main-Class`) | ✅ | `java -jar app.war` 可运行 |
-| 普通 Servlet WAR | ❌ 明确报错 | jar2native 不内置 Servlet 容器,请部署到 Tomcat/Jetty |
+| Platform | JDK Source | Runtime Image | Status |
+|----------|-----------|---------------|--------|
+| macOS (amd64/arm64) | Homebrew, `.jdks`, `/Library/Java/...` | `jlink` or legacy copy | ✅ |
+| Linux (amd64/arm64) | `/usr/lib/jvm`, `/usr/java`, `.jdks` | `jlink` or legacy copy | ✅ |
+| Windows (amd64) | `Program Files\Java`, `.jdks` | `jlink` or legacy copy | ✅ |
 
-### Java 8
+The tool auto-detects the JDK from standard locations per OS. Override with `--jdk` or `JAVA_HOME`.
 
-Java 8 has no `jlink`/`jdeps`. The default mode copies the JDK's full JRE as-is. `--deps` is explicitly rejected with a clear error instead of pretending to work.
+## CLI Options
 
----
+```
+  -jar            Path to JAR or WAR (required)
+  -o, --output     Output binary name (default: same as input without extension)
+      --jdk        JDK home path (default: JAVA_HOME or auto-detect)
+      --platform   Target os/arch (default: host, e.g. linux/amd64)
+      --jre-mode   JRE build mode: auto, jlink, copy (default: auto)
+      -analyze      Run jdeps to trim unused modules (default: full JRE)
+      --modules    Extra JDK modules, comma-separated (use with -analyze)
+      --jvm-args   JVM args passed to runner (e.g. "-Xmx2g -Dfile.encoding=UTF-8")
+      --verbose    Verbose output
+```
 
-## 运行时行为 / Runtime behavior
+## Key Design
 
-The generated executable:
+- **Full JRE by default** — `jdeps` often fails on real-world WARs (obfuscated classes, new bytecode tags). Default to full JRE; jdeps is opt-in via `-analyze`.
+- **Deterministic builds** — Fixed timestamp (1980-01-01), normalized permissions (0755/0644), deflate compression. Same input always produces byte-identical output.
+- **PID-based cache lock** — Stale locks from killed processes are automatically reclaimed. Atomic extract to temp dir + rename.
+- **Single source of truth** — `runner/shared.go` handles zip-slip protection, cache management, and manifest verification. It's compiled normally by the tool AND written verbatim into each generated runner, eliminating build-time/runtime drift.
 
-1. **Atomically extracts** the embedded runtime to a cache directory on first run (`~/Library/Caches/jar2native/<hash>` on macOS, `~/.cache/jar2native/<hash>` on Linux). Concurrent starts are coordinated with a lock file; extraction happens in a temp directory and becomes visible via a single atomic rename — no process can ever observe a partial JRE.
-2. **Verifies completeness** via an embedded `manifest.json` (runtime platform, mode, hashes) plus a layout check (`jre/bin/java`, application JAR).
-3. **Forwards signals** (`SIGINT`/`SIGTERM`/`SIGHUP`) to the JVM, so Docker/Kubernetes/systemd stop requests reach your application (e.g. Spring graceful shutdown).
-4. **Propagates the exit code** verbatim: if your app exits with 42, the executable exits with 42.
+## Project Structure
 
-### Argument layering
+```
+jar2native/
+├── main.go                 # CLI entry, config, platform, logging, orchestration
+├── go.mod
+├── Makefile
+├── jdk/jdk.go              # JDK discovery, version detection, validation, jlink compress
+├── runtime/builder.go      # jlink full build + module trim + legacy JRE copy
+├── payload/payload.go     # Artifact inspection, manifest, deterministic payload.zip, zip-slip extraction
+├── analyzer/analyzer.go   # jdeps module dependency analysis (opt-in)
+├── runner/runner.go       # Runner template generation + go build
+├── runner/shared.go       # Shared source (zip-slip, cache, manifest) — embedded into generated runners
+└── tests/e2e/run.sh       # End-to-end test (3-line shell script)
+```
+
+## Testing
 
 ```bash
-./app -- foo bar          # "foo bar" are application args
-./app foo bar             # equivalent
+# Build the tool first
+make build
+
+# Run e2e — downloads Jenkins WAR, packages it, runs the binary
+bash tests/e2e/run.sh
 ```
-
-JVM arguments are never mixed with application arguments:
-
-| 层级 | 来源 |
-| --- | --- |
-| 1. JVM args(构建期) | `--jvm-arg "-Xmx2g"` |
-| 2. JVM args(运行期) | `JAR2NATIVE_JVM_OPTS="-Xmx1g -Dfoo=bar"`(空格分隔,不做 shell 解析) |
-| 3. 应用 args | 命令行参数(开头的 `--` 会被剥离) |
-
-最终命令形如:`java [JVM args] -jar app.jar [app args]`
-
-### Environment variables
-
-- `JAR2NATIVE_JVM_OPTS` — extra JVM options at runtime (space-separated)
-- `JAR2NATIVE_CACHE_DIR` — override the runtime cache directory
-
----
-
-## 工作原理 / How it works
-
-```text
-Java JAR/WAR
-  → inspect MANIFEST.MF (executable JAR / Spring Boot / executable WAR)
-  → detect + strictly validate a local JDK (never downloaded)
-  → full runtime by default (jlink ALL-MODULE-PATH; Java 8: full JRE copy)
-    or --deps: jdeps → jlink minimal runtime
-  → stream application + runtime + manifest.json into payload.zip
-  → embed payload into a Go binary and compile
-  → smoke test: run the binary, extract, verify bundled java -version
-```
-
-Priority for the default (full) mode: **Correctness > Compatibility > Size**.
-`--deps` mode optimizes for size — with the documented trade-offs.
-
----
-
-## Build & install
-
-```bash
-make build     # build the jar2native tool itself → ./jar2native
-make install   # install to $GOPATH/bin
-make test      # run unit tests
-make e2e       # real-app end-to-end test with Halo (downloads on demand)
-```
-
-### Real-application end-to-end test
-
-`make e2e` (or `scripts/e2e_halo.sh`) packages two official [Halo](https://github.com/halo-dev/halo) releases — `v1.2.0` (Spring Boot 2.2) and `v2.26.0` (Spring Boot 4.1) — and verifies the full lifecycle of each generated binary:
-
-1. **package** — full-JRE mode with an auto-detected local JDK
-2. **start** — run the self-contained executable
-3. **serve** — poll HTTP until the web server answers (302/200)
-4. **stop** — SIGTERM → graceful shutdown (Spring shutdown hooks run, process exits cleanly)
-
-JARs are downloaded from GitHub releases and cached in `.e2e-cache/` (a copy already present in `~/Downloads` is reused). Override JDK selection with `J2N_JDK17` / `J2N_JDK21`.
-
----
 
 ## License
 
-GPL-3.0 (see [LICENSE](LICENSE)).
+MIT
