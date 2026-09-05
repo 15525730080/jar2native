@@ -8,11 +8,11 @@
 package runner
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"text/template"
 )
@@ -194,20 +194,7 @@ func main() {
 }
 `))
 
-// sharedSource holds the raw text of shared.go for embedding. At init time we
-// read it from the sibling file. This avoids needing //go:embed at build time
-// (the tool itself doesn't embed — it writes the file into the generated dir).
-var sharedSource = readSharedSource()
+//go:embed shared.go
+var sharedSourceFile []byte
 
-func readSharedSource() string {
-	// We inline shared.go's content by reading it at runtime from the same
-	// directory. This keeps a single source of truth.
-	_, file, _, _ := runtime.Caller(0)
-	data, err := os.ReadFile(filepath.Join(filepath.Dir(file), "shared.go"))
-	if err != nil {
-		// Fallback: empty — will cause compile errors in generated runner,
-		// which is better than silently shipping a broken runner.
-		return "package main\n"
-	}
-	return string(data)
-}
+var sharedSource = string(sharedSourceFile)
