@@ -2,6 +2,8 @@
 
 Turn any executable JAR or WAR into a standalone native binary — no Java required at runtime.
 
+[中文文档](README_zh.md) · [Download Releases](https://github.com/15525730080/jar2native/releases)
+
 jar2native packages a Java JAR/WAR into a self-contained executable with an embedded JRE. The output is a single binary file that runs anywhere the target platform supports, with zero external dependencies.
 
 ## Use Cases
@@ -20,11 +22,33 @@ jar2native packages a Java JAR/WAR into a self-contained executable with an embe
 5. **Generate runner** — A Go project that embeds the payload and launches `java -jar` with forwarded arguments and signals.
 6. **Compile** — `go build` produces the final single binary.
 
-## Quick Start
+## Usage
+
+### Use a Release binary
+
+Download the executable for your platform from the [Releases page](https://github.com/15525730080/jar2native/releases), make it executable on Unix-like systems, and run it directly:
+
+```bash
+# Linux/macOS
+chmod +x jar2native
+
+# Package a JAR into ./myapp
+./jar2native -jar app.jar -o myapp
+
+# Package a WAR into ./myapp
+./jar2native -jar app.war -o myapp
+
+# Run the generated self-contained application
+./myapp
+```
+
+The input JAR/WAR must be executable and contain a `Main-Class`. The packaging machine needs a compatible JDK and Go; the generated application does not need Java or a JRE at runtime.
+
+### Build from source
 
 ```bash
 # Build the tool
-go build -o jar2native .
+make build
 
 # Package a JAR — produces ./myapp
 ./jar2native -jar app.jar -o myapp
@@ -38,7 +62,7 @@ go build -o jar2native .
 # With JVM arguments
 ./jar2native -jar app.jar -o myapp --jvm-args "-Xmx2g -Dfile.encoding=UTF-8"
 
-# Run the result — that's it
+# Run the result
 ./myapp
 ```
 

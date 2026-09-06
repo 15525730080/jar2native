@@ -2,6 +2,8 @@
 
 将任何可执行的 JAR 或 WAR 打包成独立原生二进制文件 — 运行时无需安装 Java。
 
+[English README](README.md) · [下载 Release](https://github.com/15525730080/jar2native/releases)
+
 jar2native 把 Java JAR/WAR 连同内嵌 JRE 一起打包成单一可执行文件。产物是一个普通二进制文件，拷到目标平台直接运行，零外部依赖。
 
 ## 适用场景
@@ -20,11 +22,33 @@ jar2native 把 Java JAR/WAR 连同内嵌 JRE 一起打包成单一可执行文�
 5. **生成启动器** — 生成 Go 项目，内嵌 payload，启动 `java -jar` 并转发参数和信号。
 6. **编译** — `go build` 编译出最终单体二进制。
 
-## 快速开始
+## 使用方法
+
+### 直接使用 Release 可执行文件
+
+从 [Releases 页面](https://github.com/15525730080/jar2native/releases) 下载对应平台的可执行文件。Linux/macOS 下载后先增加执行权限，然后直接执行打包：
+
+```bash
+# Linux/macOS
+chmod +x jar2native
+
+# 将 JAR 打包成 ./myapp
+./jar2native -jar app.jar -o myapp
+
+# 将 WAR 打包成 ./myapp
+./jar2native -jar app.war -o myapp
+
+# 运行生成的自包含应用
+./myapp
+```
+
+输入的 JAR/WAR 必须是可执行包，并包含 `Main-Class`。打包机器需要兼容的 JDK 和 Go；生成的应用运行时不需要 Java 或 JRE。
+
+### 从源码构建
 
 ```bash
 # 构建工具
-go build -o jar2native .
+make build
 
 # 打包 JAR — 产出 ./myapp
 ./jar2native -jar app.jar -o myapp
