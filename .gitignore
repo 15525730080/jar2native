@@ -1,8 +1,10 @@
 *.exe
+runner/bin/runner-*
 *.dll
 *.so
 *.dylib
 jar2native
+dist/
 *.jar
 *.war
 .DS_Store

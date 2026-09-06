@@ -1,15 +1,29 @@
-.PHONY: build test vet fmt clean e2e release all
-
+VERSION ?= v3.1.2
+DIST_DIR ?= dist
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 
-build:
-	@if command -v go >/dev/null 2>&1; then \
-		mkdir -p dist; \
-		CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags="-s -w" -o dist/jar2native-$(GOOS)-$(GOARCH) .; \
-	else \
-		echo "go not found. Please install Go or run in CI."; exit 1; \
-	fi
+.PHONY: build runners release test vet fmt clean e2e
+
+runners:
+	@mkdir -p runner/bin
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o runner/bin/runner-linux-amd64 ./runner/generic
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags '-s -w' -o runner/bin/runner-linux-arm64 ./runner/generic
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o runner/bin/runner-windows-amd64.exe ./runner/generic
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o runner/bin/runner-darwin-amd64 ./runner/generic
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags '-s -w' -o runner/bin/runner-darwin-arm64 ./runner/generic
+
+build: runners
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o jar2native .
+
+release: runners test
+	@rm -rf $(DIST_DIR)
+	@mkdir -p $(DIST_DIR)
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o $(DIST_DIR)/jar2native-linux-amd64 .
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags '-s -w' -o $(DIST_DIR)/jar2native-linux-arm64 .
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o $(DIST_DIR)/jar2native-darwin-amd64 .
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags '-s -w' -o $(DIST_DIR)/jar2native-darwin-arm64 .
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o $(DIST_DIR)/jar2native-windows-amd64.exe .
 
 test: vet
 	go test ./...
@@ -23,16 +37,8 @@ fmt:
 e2e:
 	bash tests/e2e/run.sh
 
-release:
-	mkdir -p dist
-	@for p in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64; do \
-		OS=$${p%/*}; ARCH=$${p#*/}; \
-		echo "Building $$OS/$$ARCH..."; \
-		OUT=dist/jar2native-$$OS-$$ARCH; \
-		if [ "$$OS" = "windows" ]; then OUT=$$OUT.exe; fi; \
-		CGO_ENABLED=0 GOOS=$$OS GOARCH=$$ARCH go build -ldflags="-s -w" -o $$OUT . || exit 1; \
-	done
-
 clean:
 	rm -f dist/* jar2native
+	rm -f runner/bin/runner-*
+	rm -rf $(DIST_DIR)
 	rm -rf /tmp/jar2native-build-*

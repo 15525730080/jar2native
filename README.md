@@ -19,8 +19,8 @@ jar2native packages a Java JAR/WAR into a self-contained executable with an embe
 2. **Resolve JDK** — From `--jdk`, `JAVA_HOME`, or auto-search standard platform locations.
 3. **Build runtime** — Full JRE via `jlink` (JDK 9+) or copy legacy JRE (Java 8). Use `-analyze` to run `jdeps` for module trimming.
 4. **Assemble payload** — Deterministic `payload.zip` (app + JRE + `manifest.json`) with fixed timestamps and content hashing.
-5. **Generate runner** — A Go project that embeds the payload and launches `java -jar` with forwarded arguments and signals.
-6. **Compile** — `go build` produces the final single binary.
+5. **Stamp runner** — A precompiled, platform-specific runner reads its configuration from the binary tail; jar2native appends the payload and JSON without compiling Go.
+6. **Fallback** — Unsupported targets use the legacy generated Go runner and `go build` path.
 
 ## Usage
 
@@ -52,12 +52,12 @@ On Windows, use PowerShell. Windows executables are generated with the `.exe` su
 .\myapp.exe
 ```
 
-The input JAR/WAR must be executable and contain a `Main-Class`. The packaging machine needs a compatible JDK and Go; the generated application does not need Java or a JRE at runtime.
+The input JAR/WAR must be executable and contain a `Main-Class`. The packaging machine needs a compatible JDK. Release builds include the generic runners, so packaging does not need Go; the generated application needs neither Java nor a JRE at runtime.
 
 ### Build from source
 
 ```bash
-# Build the tool
+# Build the tool and its embedded platform runners (requires Go 1.21+)
 make build
 
 # Package a JAR — produces ./myapp
@@ -81,12 +81,13 @@ go build -o jar2native.exe .
 .\myapp.exe
 ```
 
-`--platform` only controls the target platform of the generated Go runner. The embedded JRE is built by `jlink` from the JDK selected by `--jdk` or `JAVA_HOME`, so it must be a JDK for the target platform. The current implementation does not download or switch JDKs automatically; for reliable cross-platform packaging, run jar2native with a target-platform JDK and build environment.
+`--platform` selects the embedded runner and JRE target platform. The embedded JRE is built by `jlink` from the JDK selected by `--jdk` or `JAVA_HOME`, so it must be a JDK for the target platform. The current implementation does not download or switch JDKs automatically. Targets without an embedded runner use the fallback Go build path.
 
 ## Requirements
 
-- **Build time:** JDK 9+ (for `jlink`) or JDK 8 (for legacy JRE copy), Go 1.23+
-- **Runtime:** None. The output binary is fully self-contained — no Java, no JRE, no DLLs.
+- **Build jar2native:** Go 1.21+ (runs `make build`, which creates embedded runners)
+- **Package an application:** JDK 9+ (for `jlink`) or JDK 8 (legacy JRE copy); no Go
+- **Run the generated application:** No dependencies. The output binary is fully self-contained — no Java, no JRE, no DLLs.
 
 ## Platform Support
 
@@ -132,8 +133,11 @@ jar2native/
 ├── runtime/builder.go      # jlink full build + module trim + legacy JRE copy
 ├── payload/payload.go     # Artifact inspection, manifest, deterministic payload.zip, zip-slip extraction
 ├── analyzer/analyzer.go   # jdeps module dependency analysis (opt-in)
-├── runner/runner.go       # Runner template generation + go build
-├── runner/shared.go       # Shared source (zip-slip, cache, manifest) — embedded into generated runners
+├── runner/runner.go       # Legacy runner template generation + go build fallback
+├── runner/stamp.go        # Deterministic payload/config trailer format
+├── runner/generic/main.go # Runtime-configured precompiled runner
+├── runner/bin/            # make runners output, embedded into jar2native
+├── runner/shared.go       # Shared zip-slip, cache, and manifest logic
 └── tests/e2e/run.sh       # End-to-end test (3-line shell script)
 ```
 

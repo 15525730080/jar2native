@@ -1,13 +1,14 @@
 // Command jar2native packages a Java JAR/WAR into a self-contained native
 // executable with an embedded JRE. It runs jdeps to determine required
 // modules, builds a minimal runtime via jlink (or copies a legacy JRE),
-// assembles a deterministic payload.zip, generates a Go runner project, and
-// compiles it into the final binary.
+// assembles a deterministic payload.zip, and stamps it onto a native runner.
 package main
 
 import (
+	"embed"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -19,6 +20,12 @@ import (
 	"github.com/fanbozhou/jar2native/runner"
 	rtpkg "github.com/fanbozhou/jar2native/runtime"
 )
+
+// runner/bin is populated by make runners. Unsupported or absent targets use
+// the Go build fallback.
+//
+//go:embed runner/bin/*
+var embeddedRunners embed.FS
 
 // ── Platform ────────────────────────────────────────────────────────────────
 
@@ -33,6 +40,15 @@ func (p Platform) String() string { return p.OS + "/" + p.Arch }
 // hostPlatform returns the current GOOS/GOARCH.
 func hostPlatform() Platform {
 	return Platform{OS: runtime.GOOS, Arch: runtime.GOARCH}
+}
+
+func embeddedRunner(platform Platform) ([]byte, bool) {
+	name := "runner/bin/runner-" + platform.OS + "-" + platform.Arch
+	if platform.OS == "windows" {
+		name += ".exe"
+	}
+	data, err := fs.ReadFile(embeddedRunners, name)
+	return data, err == nil
 }
 
 // parsePlatform parses "os/arch" or returns host platform on empty input.
@@ -222,31 +238,54 @@ func packageApp(cfg *Config) error {
 	}
 	logOK("Payload: %d bytes (hash: %s)", pl.Size, pl.ArchiveHash[:16])
 
-	// Generate and compile runner.
-	runnerDir := filepath.Join(tmpDir, "runner")
-	logStep("Generating runner project")
+	// Stamp a precompiled runner when one is available. This keeps Go out of
+	// the packaging machine; unsupported targets retain the legacy fallback.
 	jvmArgs := tokenizeArgs(cfg.JVMArgs)
-	rcfg := runner.Config{
-		PayloadHash: pl.ArchiveHash,
-		JarName:     filepath.Base(cfg.AppPath),
-		JVMArgs:     jvmArgs,
-		OS:          cfg.Platform.OS,
-		Arch:        cfg.Platform.Arch,
-	}
-
-	// Copy payload.zip into runner dir for embedding.
-	if err := os.MkdirAll(runnerDir, 0o755); err != nil {
-		return fmt.Errorf("create runner dir: %w", err)
-	}
-	if err := copyFile(zipPath, filepath.Join(runnerDir, "payload.zip")); err != nil {
-		return fmt.Errorf("copy payload to runner dir: %w", err)
-	}
-
 	appName := strings.TrimSuffix(filepath.Base(cfg.AppPath), filepath.Ext(cfg.AppPath))
-	logStep("Compiling native binary: %s", cfg.Output)
-	binaryPath, err := runner.Build(runnerDir, rcfg, appName, cfg.Platform.OS)
+	payloadData, err := os.ReadFile(zipPath)
 	if err != nil {
-		return fmt.Errorf("build runner: %w", err)
+		return fmt.Errorf("read payload: %w", err)
+	}
+	var binaryPath string
+	if genericBinary, ok := embeddedRunner(cfg.Platform); ok {
+		logStep("Stamping native binary: %s (no Go toolchain required)", cfg.Output)
+		stamped, err := runner.Stamp(genericBinary, payloadData, runner.StampConfig{
+			AppName:     appName,
+			JarName:     filepath.Base(cfg.AppPath),
+			JVMArgs:     jvmArgs,
+			PayloadHash: pl.ArchiveHash,
+		})
+		if err != nil {
+			return fmt.Errorf("stamp runner: %w", err)
+		}
+		binaryPath = filepath.Join(tmpDir, appName)
+		if cfg.Platform.OS == "windows" {
+			binaryPath += ".exe"
+		}
+		if err := os.WriteFile(binaryPath, stamped, 0o755); err != nil {
+			return fmt.Errorf("write stamped runner: %w", err)
+		}
+	} else {
+		runnerDir := filepath.Join(tmpDir, "runner")
+		logStep("Generating runner project")
+		rcfg := runner.Config{
+			PayloadHash: pl.ArchiveHash,
+			JarName:     filepath.Base(cfg.AppPath),
+			JVMArgs:     jvmArgs,
+			OS:          cfg.Platform.OS,
+			Arch:        cfg.Platform.Arch,
+		}
+		if err := os.MkdirAll(runnerDir, 0o755); err != nil {
+			return fmt.Errorf("create runner dir: %w", err)
+		}
+		if err := copyFile(zipPath, filepath.Join(runnerDir, "payload.zip")); err != nil {
+			return fmt.Errorf("copy payload to runner dir: %w", err)
+		}
+		logStep("Compiling native binary: %s", cfg.Output)
+		binaryPath, err = runner.Build(runnerDir, rcfg, appName, cfg.Platform.OS)
+		if err != nil {
+			return fmt.Errorf("build runner: %w", err)
+		}
 	}
 
 	// Move binary to final output path.

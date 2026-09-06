@@ -48,6 +48,7 @@ func Build(runnerDir string, cfg Config, appName, targetOS string) (string, erro
 	cmd.Dir = runnerDir
 	cmd.Env = append(os.Environ(),
 		"CGO_ENABLED=0",
+		"GOTOOLCHAIN=local",
 		"GOOS="+targetOS,
 		"GOARCH="+cfg.Arch,
 	)
@@ -69,7 +70,7 @@ func generateProject(dir string, cfg Config, appName string) error {
 
 	// Write go.mod (no external dependencies).
 	if err := writeIfMissing(filepath.Join(dir, "go.mod"),
-		"module runner\n\ngo 1.23\n"); err != nil {
+		"module runner\n\ngo 1.19\n"); err != nil {
 		return err
 	}
 

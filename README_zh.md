@@ -19,8 +19,8 @@ jar2native 把 Java JAR/WAR 连同内嵌 JRE 一起打包成单一可执行文�
 2. **解析 JDK** — 从 `--jdk`、`JAVA_HOME` 或各平台标准路径自动搜索。
 3. **构建运行时** — 默认用 `jlink` 构建全量 JRE（JDK 9+），或拷贝旧版 JRE（Java 8）。加 `-analyze` 可通过 `jdeps` 裁剪模块。
 4. **组装 payload** — 确定性打包 `payload.zip`（应用 + JRE + `manifest.json`），固定时间戳 + 内容哈希。
-5. **生成启动器** — 生成 Go 项目，内嵌 payload，启动 `java -jar` 并转发参数和信号。
-6. **编译** — `go build` 编译出最终单体二进制。
+5. **盖印启动器** — 使用预编译的目标平台通用 runner，从二进制尾部读取配置；直接追加 payload 和 JSON，无需编译 Go。
+6. **回退路径** — 目标平台没有内嵌 runner 时，使用旧的 Go 工程生成和 `go build`。
 
 ## 使用方法
 
@@ -42,7 +42,7 @@ chmod +x jar2native
 # 运行生成的自包含应用
 ./myapp
 ```
-
+ 5. **盖印启动器** — 使用预编译的目标平台通用 runner，从二进制尾部读取配置；直接追加 payload 和 JSON，无需编译 Go。
 Windows 请使用 PowerShell。Windows 产物使用 `.exe` 后缀：
 
 ```powershell
@@ -58,7 +58,7 @@ Windows 请使用 PowerShell。Windows 产物使用 `.exe` 后缀：
 ### 从源码构建
 
 ```bash
-# 构建工具
+# 构建工具和内嵌平台 runner（需要 Go 1.21+）
 make build
 
 # 打包 JAR — 产出 ./myapp
@@ -76,7 +76,7 @@ make build
 
 Windows 构建和运行方式：
 
-```powershell
+ 输入的 JAR/WAR 必须是可执行包，并包含 `Main-Class`。打包机器需要兼容的 JDK；Release 构建已内嵌通用 runner，因此打包应用不需要 Go。生成的应用运行时不需要 Java 或 JRE。
 go build -o jar2native.exe .
 .\jar2native.exe -jar app.jar -o myapp
 .\myapp.exe
@@ -86,8 +86,9 @@ go build -o jar2native.exe .
 
 ## 环境要求
 
-- **构建时：** JDK 9+（jlink）或 JDK 8（旧版拷贝），Go 1.23+
-- **运行时：** 无。产物二进制完全自包含 — 不需要 Java、不需要 JRE、不需要额外 DLL。
+- **构建 jar2native：** Go 1.21+（运行 `make build`，会生成内嵌 runner）
+- **打包应用：** JDK 9+（jlink）或 JDK 8（旧版拷贝），不需要 Go
+- **运行产物：** 无依赖。产物二进制完全自包含，不需要 Java、JRE 或额外 DLL。
 
 ## 平台支持
 
@@ -105,7 +106,7 @@ go build -o jar2native.exe .
 
 ```
   -jar            JAR 或 WAR 路径（必填）
-  -o, --output     输出二进制名（默认与输入同名）
+ `--platform` 选择内嵌 runner 和 JRE 的目标平台。内嵌 JRE 是通过 `--jdk` 或 `JAVA_HOME` 指定的 JDK 调用 `jlink` 构建的，因此必须准备目标平台对应的 JDK。当前实现不会自动下载或切换 JDK。没有内嵌 runner 的目标平台会回退到 Go 编译路径。
       --jdk        JDK 路径（默认 JAVA_HOME 或自动探测）
       --platform   目标平台（默认本机，如 linux/amd64）
       --jre-mode   JRE 构建模式：auto, jlink, copy（默认 auto）
@@ -133,8 +134,11 @@ jar2native/
 ├── runtime/builder.go      # jlink 全量构建 + 模块裁剪 + Java8 JRE 拷贝
 ├── payload/payload.go     # artifact 识别 + manifest + 确定性 payload.zip + zip-slip 安全提取
 ├── analyzer/analyzer.go   # jdeps 模块依赖分析（opt-in）
-├── runner/runner.go       # runner 模板生成 + go build
-├── runner/shared.go       # 共享源码（zip-slip / 缓存 / manifest）— 嵌入生成的 runner
+├── runner/runner.go       # 旧 runner 模板生成 + go build 回退路径
+├── runner/stamp.go        # 确定性的 payload/config 尾部格式
+├── runner/generic/main.go # 运行时读取配置的预编译 runner
+├── runner/bin/            # make runners 生成并嵌入 jar2native 的 runner
+├── runner/shared.go       # zip-slip / 缓存 / manifest 共享逻辑
 └── tests/e2e/run.sh       # 端到端测试（3 行 shell 脚本）
 ```
 
