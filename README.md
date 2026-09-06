@@ -96,6 +96,8 @@ go build -o jar2native.exe .
 | Linux (amd64/arm64) | `/usr/lib/jvm`, `/usr/java`, `.jdks` | `jlink` or legacy copy | ✅ |
 | Windows (amd64) | `Program Files\Java`, `.jdks` | `jlink` or legacy copy | ✅ |
 
+`amd64` means x86-64 and works on both Intel 64-bit and AMD 64-bit CPUs. The Windows target currently documented and tested is `windows/amd64`; 32-bit x86 (`windows/386`) is not currently supported because it also requires a compatible 32-bit JDK/JRE.
+
 The tool auto-detects the JDK from standard locations per OS. Override with `--jdk` or `JAVA_HOME`.
 
 ## CLI Options

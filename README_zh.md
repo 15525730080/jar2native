@@ -97,6 +97,8 @@ go build -o jar2native.exe .
 | Linux (amd64/arm64) | `/usr/lib/jvm`、`/usr/java`、`.jdks` | `jlink` 或旧版拷贝 | ✅ |
 | Windows (amd64) | `Program Files\Java`、`.jdks` | `jlink` 或旧版拷贝 | ✅ |
 
+`amd64` 指 x86-64，也就是 64 位 x86，Intel 和 AMD 的 64 位 CPU 都支持。当前文档和测试覆盖的是 `windows/amd64`；32 位 x86（`windows/386`）暂不支持，因为它还需要兼容的 32 位 JDK/JRE。
+
 工具按各平台标准路径自动探测 JDK。可用 `--jdk` 或 `JAVA_HOME` 覆盖。
 
 ## 命令行选项
