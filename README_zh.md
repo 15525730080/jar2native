@@ -56,15 +56,14 @@ make build
 # 打包 WAR（必须是可执行 WAR，即带 Main-Class）
 ./jar2native -jar app.war -o myapp
 
-# 交叉编译 Linux 版本
-./jar2native -jar app.jar -o myapp --platform linux/amd64
-
 # 带 JVM 参数
 ./jar2native -jar app.jar -o myapp --jvm-args "-Xmx2g -Dfile.encoding=UTF-8"
 
 # 运行产物 — 就这么简单
 ./myapp
 ```
+
+`--platform` 只控制生成的 Go runner 的目标平台。内嵌 JRE 是通过 `--jdk` 或 `JAVA_HOME` 指定的 JDK 调用 `jlink` 构建的，因此必须准备目标平台对应的 JDK。当前实现不会自动下载或切换 JDK；如需可靠地打包其他平台，请在目标平台的 JDK 和构建环境中运行 jar2native。
 
 ## 环境要求
 

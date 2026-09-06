@@ -56,15 +56,14 @@ make build
 # Package a WAR (must be executable — have Main-Class)
 ./jar2native -jar app.war -o myapp
 
-# Cross-compile for Linux
-./jar2native -jar app.jar -o myapp --platform linux/amd64
-
 # With JVM arguments
 ./jar2native -jar app.jar -o myapp --jvm-args "-Xmx2g -Dfile.encoding=UTF-8"
 
 # Run the result
 ./myapp
 ```
+
+`--platform` only controls the target platform of the generated Go runner. The embedded JRE is built by `jlink` from the JDK selected by `--jdk` or `JAVA_HOME`, so it must be a JDK for the target platform. The current implementation does not download or switch JDKs automatically; for reliable cross-platform packaging, run jar2native with a target-platform JDK and build environment.
 
 ## Requirements
 
