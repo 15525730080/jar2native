@@ -1,7 +1,8 @@
-VERSION ?= v3.1.2
+VERSION ?= v3.1.3
 DIST_DIR ?= dist
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
+BUILD_OUTPUT = jar2native$(if $(filter windows,$(GOOS)),.exe,)
 
 .PHONY: build runners release test vet fmt clean e2e
 
@@ -14,7 +15,7 @@ runners:
 	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags '-s -w' -o runner/bin/runner-darwin-arm64 ./runner/generic
 
 build: runners
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o jar2native .
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(BUILD_OUTPUT) .
 
 release: runners test
 	@rm -rf $(DIST_DIR)
@@ -38,7 +39,7 @@ e2e:
 	bash tests/e2e/run.sh
 
 clean:
-	rm -f dist/* jar2native
+	rm -f dist/* jar2native jar2native.exe
 	rm -f runner/bin/runner-*
 	rm -rf $(DIST_DIR)
 	rm -rf /tmp/jar2native-build-*

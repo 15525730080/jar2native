@@ -145,14 +145,17 @@ Options:
 	}
 	cfg.AppPath = absPath
 
+	cfg.Platform, err = parsePlatform(*platformFlag)
+	if err != nil {
+		return nil, err
+	}
+
 	if cfg.Output == "" {
 		ext := filepath.Ext(cfg.AppPath)
 		cfg.Output = strings.TrimSuffix(filepath.Base(cfg.AppPath), ext)
 	}
-
-	cfg.Platform, err = parsePlatform(*platformFlag)
-	if err != nil {
-		return nil, err
+	if cfg.Platform.OS == "windows" && !strings.EqualFold(filepath.Ext(cfg.Output), ".exe") {
+		cfg.Output += ".exe"
 	}
 
 	cfg.JREMode = jdk.Mode(*modeFlag)
