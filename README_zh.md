@@ -9,7 +9,7 @@ jar2native 把 Java JAR/WAR 连同内嵌 JRE 一起打包成单一可执行文�
 ## 适用场景
 
 - **以原生二进制形式分发 Java 应用** — 只发一个可执行文件，用户不需要装 Java。
-- **简化部署** — 一个文件，`chmod +x` 就能跑。不用 `java -jar`，不用配 CLASSPATH，不用装 JRE。
+- **简化部署** — 一个文件，复制后即可运行。不用 `java -jar`，不用配 CLASSPATH，不用装 JRE。
 - **跨平台构建** — 一条命令打包 Linux、macOS 或 Windows。
 - **容器内嵌** — 比 JDK 镜像更小；直接把二进制丢进去就行。
 
@@ -26,10 +26,11 @@ jar2native 把 Java JAR/WAR 连同内嵌 JRE 一起打包成单一可执行文�
 
 ### 直接使用 Release 可执行文件
 
-从 [Releases 页面](https://github.com/15525730080/jar2native/releases) 下载对应平台的可执行文件。Linux/macOS 下载后先增加执行权限，然后直接执行打包：
+从 [Releases 页面](https://github.com/15525730080/jar2native/releases) 下载对应平台的可执行文件，然后直接执行打包。
+
+Linux/macOS：
 
 ```bash
-# Linux/macOS
 chmod +x jar2native
 
 # 将 JAR 打包成 ./myapp
@@ -40,6 +41,16 @@ chmod +x jar2native
 
 # 运行生成的自包含应用
 ./myapp
+```
+
+Windows 请使用 PowerShell。Windows 产物使用 `.exe` 后缀：
+
+```powershell
+# 将 JAR 打包成 .\myapp.exe
+.\jar2native.exe -jar app.jar -o myapp
+
+# 运行生成的自包含应用
+.\myapp.exe
 ```
 
 输入的 JAR/WAR 必须是可执行包，并包含 `Main-Class`。打包机器需要兼容的 JDK 和 Go；生成的应用运行时不需要 Java 或 JRE。
@@ -61,6 +72,14 @@ make build
 
 # 运行产物 — 就这么简单
 ./myapp
+```
+
+Windows 构建和运行方式：
+
+```powershell
+go build -o jar2native.exe .
+.\jar2native.exe -jar app.jar -o myapp
+.\myapp.exe
 ```
 
 `--platform` 只控制生成的 Go runner 的目标平台。内嵌 JRE 是通过 `--jdk` 或 `JAVA_HOME` 指定的 JDK 调用 `jlink` 构建的，因此必须准备目标平台对应的 JDK。当前实现不会自动下载或切换 JDK；如需可靠地打包其他平台，请在目标平台的 JDK 和构建环境中运行 jar2native。

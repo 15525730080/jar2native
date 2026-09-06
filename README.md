@@ -9,7 +9,7 @@ jar2native packages a Java JAR/WAR into a self-contained executable with an embe
 ## Use Cases
 
 - **Distribute Java apps as native binaries** — Ship a single executable instead of requiring users to install Java.
-- **Simplify deployment** — One file to copy, `chmod +x`, and run. No `java -jar`, no CLASSPATH, no JRE setup.
+- **Simplify deployment** — One file to copy and run. No `java -jar`, no CLASSPATH, no JRE setup.
 - **Cross-platform builds** — Package for Linux, macOS, or Windows from a single command.
 - **Embed in containers** — Smaller footprint than a full JDK image; just copy the binary in.
 
@@ -26,7 +26,7 @@ jar2native packages a Java JAR/WAR into a self-contained executable with an embe
 
 ### Use a Release binary
 
-Download the executable for your platform from the [Releases page](https://github.com/15525730080/jar2native/releases), make it executable on Unix-like systems, and run it directly:
+Download the executable for your platform from the [Releases page](https://github.com/15525730080/jar2native/releases), then run it directly:
 
 ```bash
 # Linux/macOS
@@ -40,6 +40,16 @@ chmod +x jar2native
 
 # Run the generated self-contained application
 ./myapp
+```
+
+On Windows, use PowerShell. Windows executables are generated with the `.exe` suffix:
+
+```powershell
+# Package a JAR into .\myapp.exe
+.\jar2native.exe -jar app.jar -o myapp
+
+# Run the generated self-contained application
+.\myapp.exe
 ```
 
 The input JAR/WAR must be executable and contain a `Main-Class`. The packaging machine needs a compatible JDK and Go; the generated application does not need Java or a JRE at runtime.
@@ -61,6 +71,14 @@ make build
 
 # Run the result
 ./myapp
+```
+
+On Windows, build and run with:
+
+```powershell
+go build -o jar2native.exe .
+.\jar2native.exe -jar app.jar -o myapp
+.\myapp.exe
 ```
 
 `--platform` only controls the target platform of the generated Go runner. The embedded JRE is built by `jlink` from the JDK selected by `--jdk` or `JAVA_HOME`, so it must be a JDK for the target platform. The current implementation does not download or switch JDKs automatically; for reliable cross-platform packaging, run jar2native with a target-platform JDK and build environment.
